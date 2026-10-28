@@ -1252,7 +1252,7 @@ function useSample(){
 }
 function updateProdUI(){
   const box=$('prodList');
-  box.innerHTML=prodImgs.map((p,i)=>`<button type="button" class="pt" data-i="${i}" aria-pressed="${!!(sel&&sel.type==='prod'&&sel.i===i)}" aria-label="상품 ${i+1} 선택"><img alt=""><span class="no">${p.sample?'샘플':i+1}</span>${p.sample?'':`<span class="x" role="button" data-x="${i}" aria-label="상품 ${i+1} 빼기">✕</span><span class="star" role="button" data-star="${i}" title="${p.libId?'라이브러리에 저장됨':'라이브러리에 저장'}" aria-label="상품 ${i+1} 라이브러리에 저장">${p.libId?'★':'☆'}</span>`}</button>`).join('');
+  box.innerHTML=prodImgs.map((p,i)=>`<button type="button" class="pt" data-i="${i}" aria-pressed="${!!(sel&&sel.type==='prod'&&sel.i===i)}" aria-label="상품 ${i+1} 선택"><img alt=""><span class="no">${p.sample?'샘플':i+1}</span>${p.sample?`<span class="x" role="button" data-x="${i}" aria-label="샘플 숨기기" title="샘플 숨기기">✕</span>`:''}${p.sample?'':`<span class="x" role="button" data-x="${i}" aria-label="상품 ${i+1} 빼기">✕</span><span class="star" role="button" data-star="${i}" title="${p.libId?'라이브러리에 저장됨':'라이브러리에 저장'}" aria-label="상품 ${i+1} 라이브러리에 저장">${p.libId?'★':'☆'}</span>`}</button>`).join('');
   box.querySelectorAll('.pt').forEach((b,i)=>{ b.querySelector('img').src=prodImgs[i].img.src; });
   box.onclick=e=>{
     const x=e.target.closest('[data-x]'); if(x){ e.stopPropagation(); sel={type:'prod',i:+x.dataset.x}; delSel(); return; }
@@ -1668,7 +1668,7 @@ function renderInspector(){
       ${rangeF('p-s','크기 (%)',it.s*100,10,250,1)}
       ${rangeF('p-irot','회전',it.rot||0,-45,45,1)}
       <div class="field"><span class="lbl">겹침 순서</span><div class="row"><button type="button" class="btn small" id="p-front" ${(it.z||0)===top?'disabled':''}>맨 앞으로</button><button type="button" class="btn small" id="p-backz" ${(it.z||0)===bot?'disabled':''}>맨 뒤로</button></div></div>
-      <div class="row"><button type="button" class="btn small" id="p-group">전체 묶음 선택</button>${pi.sample?'':'<button type="button" class="btn small" id="p-del">이 이미지 빼기</button>'}</div>
+      <div class="row"><button type="button" class="btn small" id="p-group">전체 묶음 선택</button><button type="button" class="btn small" id="p-del">${pi.sample?'샘플 숨기기':'이 이미지 빼기'}</button></div>
     </section>${backBtn()}`;
     box.innerHTML=h; $('p-thumb').src=pi.img.src;
     bindRange('p-s',v=>{ const r=it.sh!=null?it.sh/it.s:null; it.s=v/100; if(r!=null) it.sh=it.s*r; });
@@ -1818,7 +1818,7 @@ function delSel(){
   else if(sel.type==='obj'){ S.objects.splice(sel.i,1); }
   else if(sel.type==='card'){ const list=cardLines(); const order=list.map((_,j)=>j).filter(j=>j!==sel.i); setCardList(order.map(j=>list[j]),order); sel=null; changed(true); renderInspector(); return; }
   else if(sel.type==='prod'){
-    if(prodImgs[sel.i]&&prodImgs[sel.i].sample){ sel=null; return; }
+    if(prodImgs[sel.i]&&prodImgs[sel.i].sample){ S.els.product.on=false; S.els.product._userOn=false; sel=null; changed(true); renderInspector(); toast('샘플 이미지를 숨겼어요'); return; }
     prodImgs.splice(sel.i,1); S.items.splice(sel.i,1);
     sel=null; if(!prodImgs.length){ useSample(); } else arrangeItems();
     updateProdUI(); changed(true); renderInspector(); return;
