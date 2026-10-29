@@ -304,7 +304,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
         <button class="btn small" id="worksBtn" type="button">작업함</button>
         <button class="btn small" id="undoBtn" type="button" disabled title="Ctrl+Z">되돌리기</button>
         <button class="btn small" id="redoBtn" type="button" disabled title="Ctrl+Shift+Z">다시 실행</button>
-        <button class="btn small" id="resetLayout" type="button">레이아웃 초기화</button>
+        <button class="btn small" id="resetLayout" type="button" title="위치·크기·스타일만 템플릿 기본으로">레이아웃 초기화</button>
+        <button class="btn small" id="newBtn" type="button" title="이미지·문구·색까지 모두 지우고 처음 상태로">새로 만들기</button>
         <button class="btn small" id="figmaBtn" type="button">피그마로</button>
         <button class="btn small" id="saveJpg" type="button">JPG 저장</button>
         <button class="btn small primary" id="savePng" type="button">PNG 저장</button>
@@ -441,6 +442,7 @@ const S = {
   texts:Object.assign({},DEFAULT_TEXT,TPL_TEXT.tilt),
   els:null, objects:[], shapes:[], cardOpts:[],
 };
+const S_START = JSON.parse(JSON.stringify(S)); // the untouched starting state, for '새로 만들기'
 /* products: images live in memory (prodImgs); their placement lives in S.items, relative to the template's product slot */
 let prodImgs = []; // [{img, name, sample}]
 const productIsSample = () => prodImgs.length===1 && prodImgs[0].sample;
@@ -1318,7 +1320,36 @@ function applySnap(json){
   Object.keys(d).forEach(k=>S[k]=d[k]); if(!Array.isArray(S.items)||S.items.length!==prodImgs.length) arrangeItems();
   sel=null; logoListKey=''; textKey=''; syncLeft(); renderInspector(); scheduleRender(); scheduleThumbs(); save(); histApplying=false;
 }
-function undo(){ histCommit(); if(!hist.length){ toast('더 되돌릴 작업이 없어요'); return; } future.push(histBase); histBase=hist.pop(); applySnap(histBase); syncUndo(); toast('되돌렸어요'); }
+function undo(){ histCommit(); if(!hist.length){ toast('더 되돌릴 작업이 없어요'); return; }
+  const restoreImgs = freshStash && hist.length===freshStash.at; future.push(histBase); histBase=hist.pop(); applySnap(histBase);
+  if(restoreImgs){ prodImgs=freshStash.prodImgs; cardPics=freshStash.cardPics; bgImg=freshStash.bgImg; bgAvg=freshStash.bgAvg; freshStash=null;
+    if(S.items.length!==prodImgs.length) arrangeItems(); updateProdUI(); syncLeft(); scheduleRender(); scheduleThumbs(); save(); }
+  syncUndo(); toast(restoreImgs?'새로 만들기 전으로 되돌렸어요':'되돌렸어요'); }
+/* '처음부터 새로 만들기': clear images, copy, colours and logos; keep the template and size */
+let freshStash=null;
+function startFresh(){
+  checkpoint();
+  const stash={prodImgs, cardPics, bgImg, bgAvg};
+  const keep={size:S.size, tid:S.tid};
+  Object.keys(S_START).forEach(k=>{ S[k]=JSON.parse(JSON.stringify(S_START[k])); });
+  S.size=keep.size; S.tid=keep.tid; S.edited={}; S.texts=Object.assign({},DEFAULT_TEXT,TPL_TEXT[S.tid]||{});
+  S.workId=null; S.teamWorkId=null; S.workName=null; S.els=null;
+  cardPics=[]; bgImg=null; bgAvg=null; try{ localStorage.removeItem('banner-studio-bgimg'); }catch(e){}
+  const done=img=>{ prodImgs=[{img,name:'샘플',sample:true}];
+    logoListKey=''; textKey=''; rebuild(); updateProdUI(); histCommit();
+    stash.at=hist.length; freshStash=stash; updateCopy();
+    toast('처음 상태로 새로 시작했어요 · 되돌리기로 되살릴 수 있어요'); };
+  const im=makeSample(); im.onload=()=>done(im);
+}
+function confirmFresh(){
+  const t=TPL.find(x=>x.id===S.tid);
+  const m=openModal(`<div class="head"><h3>처음부터 새로 만들기</h3><button class="btn small" data-close type="button">닫기</button></div>
+    <p style="margin:0">넣은 <b>상품·카드·배경 이미지, 문구, 색, 로고, 오브제</b>를 모두 지우고 <b>${esc(t?t.n:'')}</b> 템플릿의 처음 상태로 돌아가요. 사이즈와 템플릿은 그대로예요.</p>
+    <p class="hint" style="margin:0">실수로 눌렀다면 바로 ‘되돌리기’를 누르면 이미지까지 되살아나요. 계속 쓸 작업이면 작업함에 먼저 저장해 두세요.</p>
+    <div class="row" style="justify-content:flex-end"><button class="btn" id="nfSave" type="button">작업함에 먼저 저장</button><button class="btn" data-close type="button">취소</button><button class="btn primary" id="nfGo" type="button">새로 만들기</button></div>`);
+  m.querySelector('#nfGo').onclick=()=>{ closeModal(); startFresh(); };
+  m.querySelector('#nfSave').onclick=()=>{ closeModal(); showWorks(); };
+}
 function redo(){ histCommit(); if(!future.length) return; hist.push(histBase); histBase=future.pop(); applySnap(histBase); syncUndo(); toast('다시 실행했어요'); }
 
 /* ---------- thumbnails ---------- */
@@ -2292,6 +2323,7 @@ async function showWorks(){
       toast('작업을 지웠어요'); showWorks(); } };
 }
 $('worksBtn').onclick=showWorks;
+$('newBtn').onclick=confirmFresh;
 
 /* ---------- 피그마로: layered SVG (images for effects, real text where possible) ---------- */
 async function buildSVG(){
