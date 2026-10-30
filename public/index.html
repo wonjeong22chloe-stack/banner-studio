@@ -71,6 +71,17 @@ header.top p{margin:2px 0 0;color:var(--muted);font-size:12px}
 .sprow{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
 .sprow b{font-size:12px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 6px;background:var(--panel);border-radius:4px}
 .sprow select{width:auto;padding:3px 4px;font-size:11.5px}
+.fp-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:6px 9px;cursor:pointer;text-align:left;font-size:14px}
+.fp-btn:hover{border-color:var(--muted)}
+.fp-btn .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fp-pop{position:fixed;z-index:40;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(20,15,40,.22);max-height:min(420px,70vh);overflow-y:auto;width:280px;padding:6px;scrollbar-width:thin}
+.fp-pop .grp{font-size:10.5px;color:var(--muted);font-weight:600;letter-spacing:.04em;padding:8px 8px 4px}
+.fp-pop .it{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;width:100%;border:0;background:transparent;border-radius:7px;padding:6px 8px;cursor:pointer;text-align:left;color:inherit}
+.fp-pop .it .smp{font-size:19px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fp-pop .it .lb{font-size:11px;color:var(--muted);font-family:var(--ui)}
+.fp-pop .it.hl{background:var(--accent-soft)}
+.fp-pop .it.cur .lb::before{content:'✓ ';color:var(--accent)}
+.fp-pop .tip{font-size:11px;color:var(--muted);padding:4px 8px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
 .decorbox{margin-top:12px;padding:10px;border-radius:8px;background:var(--bg)}
 .quick{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;padding:10px;border-radius:8px;background:var(--bg);margin-bottom:12px}
 .quick .field{margin-bottom:6px}
@@ -221,7 +232,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <section class="sec">
       <h2>3 · 텍스트 <span style="font-weight:400;letter-spacing:0">이 템플릿에서 쓰는 칸</span></h2>
       <div class="quick">
-        <div class="field"><label for="qFont">강조 글꼴</label><select id="qFont"></select></div>
+        <div class="field"><span class="lbl">강조 글꼴</span><div id="qFont"></div></div>
         <div class="field"><label for="qFx">강조 효과</label><select id="qFx"></select></div>
         <p class="hint" style="grid-column:1/-1;font-size:11.5px">헤드라인과 할인율·강조 문구에 함께 적용돼요. 하나씩 바꾸려면 캔버스에서 글자를 클릭하세요.</p>
       </div>
@@ -366,6 +377,54 @@ const FONTS = [
   {v:'Pacifico', n:'Pacifico (필기체)', w:[400], g:'영문 전용 (한글은 본고딕)'},
 ];
 const fontOptions = cur => { let g0='', out=''; FONTS.forEach(f=>{ if(f.g!==g0){ if(g0) out+='</optgroup>'; out+=`<optgroup label="${f.g}">`; g0=f.g; } out+=`<option value="${f.v}" ${f.v===cur?'selected':''}>${f.n}</option>`; }); return out+'</optgroup>'; };
+/* font picker: hover a font to preview it on the banner, click to apply */
+let fpOpen=null, qFontPicker=null;
+function fontPicker(host, getCur, {preview, pick, sample}){
+  const label=()=>{ const cur=getCur(), f=FONTS.find(x=>x.v===cur)||FONTS[0];
+    host.innerHTML=`<button type="button" class="fp-btn" aria-haspopup="listbox"><span class="nm" style="font-family:'${f.v}','Noto Sans KR',sans-serif">${f.n}</span><span aria-hidden="true">▾</span></button>`;
+    host.querySelector('button').onclick=open; };
+  function close(revert){ if(!fpOpen) return; const o=fpOpen; fpOpen=null; o.pop.remove(); document.removeEventListener('pointerdown',o.outside,true); document.removeEventListener('keydown',o.keys,true); window.removeEventListener('resize',o.rs);
+    if(revert) preview(null); }
+  function open(){
+    if(fpOpen){ const same=fpOpen.host===host; close(true); if(same) return; }
+    const cur=getCur(), btn=host.querySelector('button'), r=btn.getBoundingClientRect();
+    const pop=document.createElement('div'); pop.className='fp-pop'; pop.setAttribute('role','listbox');
+    let g0='', html='<div class="tip">마우스를 올리면 배너에 미리 보여요. 클릭하면 적용돼요.</div>';
+    FONTS.forEach(f=>{ if(f.g!==g0){ html+=`<div class="grp">${f.g}</div>`; g0=f.g; }
+      html+=`<button type="button" class="it ${f.v===cur?'cur':''}" role="option" data-v="${f.v}"><span class="smp" style="font-family:'${f.v}','Noto Sans KR',sans-serif;font-weight:${f.w[f.w.length-1]}">${esc(sample())}</span><span class="lb">${f.n}</span></button>`; });
+    pop.innerHTML=html; document.body.appendChild(pop);
+    const ph=pop.offsetHeight, below=window.innerHeight-r.bottom-8, left=Math.min(r.left, window.innerWidth-pop.offsetWidth-8);
+    pop.style.left=Math.max(8,left)+'px'; pop.style.top=(below>=Math.min(ph,260)||below>r.top ? r.bottom+4 : Math.max(8,r.top-ph-4))+'px';
+    const items=[...pop.querySelectorAll('.it')]; let hi=items.findIndex(b=>b.dataset.v===cur);
+    const hl=(i,scroll)=>{ items.forEach(b=>b.classList.remove('hl')); if(i<0) return; hi=i; items[i].classList.add('hl'); if(scroll) items[i].scrollIntoView({block:'nearest'}); preview(items[i].dataset.v); };
+    if(hi>=0) items[hi].scrollIntoView({block:'center'});
+    pop.addEventListener('pointerover',e=>{ const b=e.target.closest('.it'); if(b) hl(items.indexOf(b)); });
+    pop.addEventListener('pointerleave',()=>{ items.forEach(b=>b.classList.remove('hl')); preview(null); });
+    pop.addEventListener('click',e=>{ const b=e.target.closest('.it'); if(!b) return; const v=b.dataset.v; close(false); preview(null); pick(v); label(); });
+    const outside=e=>{ if(!pop.contains(e.target) && !host.contains(e.target)) close(true); };
+    const keys=e=>{ if(e.key==='Escape'){ e.preventDefault(); close(true); btn.focus(); }
+      else if(e.key==='ArrowDown'){ e.preventDefault(); hl(Math.min(items.length-1,hi+1),true); }
+      else if(e.key==='ArrowUp'){ e.preventDefault(); hl(Math.max(0,hi-1),true); }
+      else if(e.key==='Enter'&&hi>=0){ e.preventDefault(); items[hi].click(); } };
+    const rs=()=>close(true);
+    document.addEventListener('pointerdown',outside,true); document.addEventListener('keydown',keys,true); window.addEventListener('resize',rs);
+    fpOpen={host,pop,outside,keys,rs};
+  }
+  label(); return {refresh:label};
+}
+/* temporarily try a font on some elements; preview(null) puts the originals back */
+function fontTrial(getEls){
+  let orig=null;
+  return {
+    preview(f){ const els=getEls();
+      if(f){ if(!orig) orig=els.map(el=>({el,font:el.font,weight:el.weight})); const def=FONTS.find(x=>x.v===f);
+        els.forEach(el=>{ const o=orig.find(x=>x.el===el)||{weight:el.weight}; el.font=f; el.weight=def.w.includes(o.weight)?o.weight:def.w[def.w.length-1]; }); }
+      else if(orig){ orig.forEach(o=>{ o.el.font=o.font; o.el.weight=o.weight; }); orig=null; }
+      scheduleRender(); },
+    pick(f){ this.preview(null); checkpoint(); const def=FONTS.find(x=>x.v===f);
+      getEls().forEach(el=>{ el.font=f; if(!def.w.includes(el.weight)) el.weight=def.w[def.w.length-1]; }); changed(true); }
+  };
+}
 const TFX = [
   {id:'none',n:'기본'},{id:'outline',n:'외곽선'},{id:'drop',n:'입체 그림자'},{id:'soft',n:'부드러운 그림자'},
   {id:'gradient',n:'그라데이션'},{id:'block3d',n:'3D 블록'},{id:'sticker',n:'광택 스티커'},{id:'balloon',n:'풍선'},
@@ -1547,10 +1606,12 @@ function buildLeft(){
   $('fxColorAuto').onclick=()=>{ S.fxColor=null; S.objects.forEach(o=>delete o.color); changed(); };
   $('fxLayer').onclick=e=>{ const b=e.target.closest('button'); if(b){ S.fxLayer=b.dataset.v; changed(); } };
   $('reseed').onclick=()=>{ S.seed=Math.floor(Math.random()*1e6); genObjects(); changed(); };
-  $('qFont').innerHTML=fontOptions('Noto Sans KR');
+  const qTrial=fontTrial(()=>S.els?['headline','percent'].map(k=>S.els[k]).filter(Boolean):[]);
+  const qEl=()=>!S.els?null:(S.els.percent&&S.els.percent.on)?S.els.percent:S.els.headline;
+  qFontPicker=fontPicker($('qFont'), ()=>qEl()?qEl().font:'Noto Sans KR', {preview:f=>qTrial.preview(f), pick:f=>{ qTrial.pick(f); renderInspector(); },
+    sample:()=>((S.texts.headline||'').split('\n')[0].slice(0,12)||'가나다 Aa 50%')});
   $('qFx').innerHTML=TFX.map(f=>`<option value="${f.id}">${f.n}</option>`).join('');
   const quickEls=()=>['headline','percent'].map(k=>S.els[k]).filter(Boolean);
-  $('qFont').onchange=e=>{ checkpoint(); const f=FONTS.find(x=>x.v===e.target.value); quickEls().forEach(el=>{ el.font=f.v; if(!f.w.includes(el.weight)) el.weight=f.w[f.w.length-1]; }); changed(true); renderInspector(); };
   $('qFx').onchange=e=>{ checkpoint(); quickEls().forEach(el=>setFx(el,e.target.value)); changed(true); renderInspector(); };
   $('copyLabels').onchange=updateCopy;
   $('copyAll').onclick=async()=>{ const ta=$('copyText'); ta.value=bannerCopy($('copyLabels').checked);
@@ -1642,7 +1703,7 @@ function syncLeft(){
   const fxd = S.effect!=='none' ? (FX_DEF[S.effect].c||S.accent) : '#FFFFFF';
   $('fxColor').value=S.fxColor||fxd;
   renderTextFields();
-  { const q=(S.els.percent&&S.els.percent.on)?S.els.percent:S.els.headline; if(q){ if(document.activeElement!==$('qFont')) $('qFont').value=q.font; if(document.activeElement!==$('qFx')) $('qFx').value=fxOf(q)==='legacy'?'drop':fxOf(q); } }
+  { const q=(S.els.percent&&S.els.percent.on)?S.els.percent:S.els.headline; if(q){ if(qFontPicker&&!fpOpen) qFontPicker.refresh(); if(document.activeElement!==$('qFx')) $('qFx').value=fxOf(q)==='legacy'?'drop':fxOf(q); } }
   if(document.activeElement!==$('t-logo')) $('t-logo').value=S.texts.logo; $('v-logo').checked=!!S.els.logo.on;
   document.querySelectorAll('#bgMode button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===S.bgMode));
   $('bgImageBox').hidden = S.bgMode!=='image';
@@ -1931,7 +1992,7 @@ function renderInspector(){
   }
   if([...TEXT_KEYS].filter(x=>x!=='cards'&&x!=='days').includes(k)){
     h+=`<div class="field"><label for="p-text">문구</label><textarea id="p-text" rows="2">${esc(S.texts[k])}</textarea></div>
-      <div class="field"><label for="p-font">글꼴</label><select id="p-font">${fontOptions(el.font)}</select></div>`;
+      <div class="field"><span class="lbl">글꼴</span><div id="p-font"></div></div>`;
     const fw=FONTS.find(f=>f.v===el.font)?.w||[400];
     if(fw.length>1) h+=`<div class="field"><span class="lbl">굵기</span><div class="seg" id="p-weight">${fw.map(w=>`<button type="button" data-v="${w}" aria-pressed="${w===el.weight}">${{400:'보통',500:'중간',700:'굵게',800:'더굵게',900:'블랙'}[w]}</button>`).join('')}</div></div>`;
   }
@@ -2004,7 +2065,8 @@ function renderInspector(){
   const pfx=$('p-fx'); if(pfx) pfx.onclick=e=>{ const b=e.target.closest('button'); if(!b) return; checkpoint(); setFx(el,b.dataset.v); changed(true); renderInspector(); };
   if($('p-rot')) bindRange('p-rot',v=>{ el.rot=v; });
   if($('p-fs')) bindRange('p-fs',v=>{ el.size=v; });
-  const pf=$('p-font'); if(pf) pf.onchange=()=>{ el.font=pf.value; const fw=FONTS.find(f=>f.v===el.font).w; if(!fw.includes(el.weight)) el.weight=fw[fw.length-1]; changed(true); renderInspector(); };
+  const pf=$('p-font'); if(pf){ const tr=fontTrial(()=>[el]);
+    fontPicker(pf, ()=>el.font, {preview:f=>tr.preview(f), pick:f=>{ tr.pick(f); renderInspector(); }, sample:()=>((S.texts[k]||'').split('\n')[0].slice(0,12)||'가나다 Aa 50%')}); }
   const pw=$('p-weight'); if(pw) pw.onclick=e=>{ const b=e.target.closest('button'); if(b){ el.weight=+b.dataset.v; changed(true); renderInspector(); } };
   const pa=$('p-align'); if(pa) pa.onclick=e=>{ const b=e.target.closest('button'); if(!b) return; const bx=boxOf(k); el.align=b.dataset.v;
     el.x = el.align==='left'? bx.x : el.align==='right'? bx.x+bx.w : bx.x+bx.w/2; changed(true); renderInspector(); };
