@@ -82,6 +82,30 @@ header.top p{margin:2px 0 0;color:var(--muted);font-size:12px}
 .fp-pop .it.hl{background:var(--accent-soft)}
 .fp-pop .it.cur .lb::before{content:'✓ ';color:var(--accent)}
 .fp-pop .tip{font-size:11px;color:var(--muted);padding:4px 8px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.liveme{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.liveme input{width:140px;padding:5px 8px;border:1px solid var(--line);background:var(--panel);border-radius:7px}
+.liveme input.need{border-color:#C2362F;box-shadow:0 0 0 2px rgba(194,54,47,.15)}
+.livechip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--fg)}
+.dot{width:8px;height:8px;border-radius:50%;background:#2E9E6B;box-shadow:0 0 0 3px rgba(46,158,107,.18);flex:none}
+.dot.idle{background:#B9B4C2;box-shadow:none}
+.tm-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.tm-stat{background:var(--bg);border-radius:10px;padding:10px 12px}
+.tm-stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.tm-stat span{font-size:11.5px;color:var(--muted)}
+.tm-sec{margin-top:8px}
+.tm-sec h4{margin:4px 0 8px;font-size:13px;display:flex;align-items:center;gap:8px}
+.tm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tm-card{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);display:grid}
+.tm-card img{width:100%;aspect-ratio:1/1;object-fit:contain;background:var(--check);display:block}
+.tm-card .meta{padding:6px 8px;display:grid;gap:3px;font-size:11.5px;color:var(--muted)}
+.tm-card .meta b{color:var(--fg);font-size:12.5px;display:flex;align-items:center;gap:6px}
+.tm-card .meta i{font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tm-tag{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--fg);font-weight:600}
+.tm-table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+.tm-table th,.tm-table td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+.tm-table th{font-size:11px;color:var(--muted);font-weight:600}
+.tm-wrap{overflow-x:auto}
+.live-canvas{display:block;max-width:100%;max-height:62vh;margin:auto;box-shadow:0 8px 24px rgba(20,15,40,.18);background:var(--check)}
 .decorbox{margin-top:12px;padding:10px;border-radius:8px;background:var(--bg)}
 .quick{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;padding:10px;border-radius:8px;background:var(--bg);margin-bottom:12px}
 .quick .field{margin-bottom:6px}
@@ -195,6 +219,10 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   <div>
     <h1>배너 템플릿 스튜디오</h1>
     <p>템플릿을 고르고 상품 이미지만 올리면 배너가 완성돼요. 캔버스의 요소를 클릭하면 위치·크기·색을 따로 바꿀 수 있어요.</p>
+  </div>
+  <div class="liveme" id="liveBar" hidden>
+    <button type="button" class="livechip" id="liveInfo" title="팀 현황 공유 안내"><span class="dot"></span>팀 현황에 공유 중</button>
+    <label for="myName">내 이름</label><input type="text" id="myName" placeholder="이름을 적어주세요" autocomplete="off">
   </div>
 </header>
 
@@ -312,6 +340,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="toolbar">
       <span id="sizeInfo"></span>
       <div class="actions">
+        <button class="btn small" id="teamBtn" type="button" hidden>팀 현황</button>
         <button class="btn small" id="worksBtn" type="button">작업함</button>
         <button class="btn small" id="undoBtn" type="button" disabled title="Ctrl+Z">되돌리기</button>
         <button class="btn small" id="redoBtn" type="button" disabled title="Ctrl+Shift+Z">다시 실행</button>
@@ -2215,16 +2244,25 @@ async function exportImg(type){
   drawScene(g,1,S.tid,S.els,S.objects,false,S.shapes);
   const mime=type==='jpg'?'image/jpeg':'image/png';
   const blob=await new Promise(r=>c.toBlob(r,mime,.93));
-  return saveBlob(`banner_${S.tid}_${W()}x${H()}.${type}`, blob, true);
+  const ok=await saveBlob(`banner_${S.tid}_${W()}x${H()}.${type}`, blob, true); if(ok) liveEvent(type); return ok;
 }
+const SAVE_TYPES={png:['PNG 이미지','image/png'],jpg:['JPG 이미지','image/jpeg'],svg:['SVG (피그마용)','image/svg+xml'],json:['배너 작업 파일','application/json']};
 async function saveBlob(name, blob, isImage){
+  // Chrome·Edge on the team site: let the person choose the folder and file name
+  if(!window.claude && window.showSaveFilePicker){
+    const ext=(name.split('.').pop()||'').toLowerCase(), t=SAVE_TYPES[ext];
+    try{
+      const h=await window.showSaveFilePicker({suggestedName:name, types:t?[{description:t[0],accept:{[t[1]]:['.'+ext]}}]:undefined});
+      const w=await h.createWritable(); await w.write(blob); await w.close(); toast(`${h.name} 저장했어요`); return true;
+    }catch(e){ if(e&&e.name==='AbortError') return false; /* not allowed here: fall back to a normal download */ }
+  }
   if(downloads){
-    try{ await downloads.save({filename:name,data:blob}); toast(`${name} 저장했어요`); return; }
-    catch(err){ if(err&&err.code==='declined') return; if(err&&err.code==='rate_limited'){ toast('저장 창이 이미 열려 있어요'); return; } }
+    try{ await downloads.save({filename:name,data:blob}); toast(`${name} 저장했어요`); return true; }
+    catch(err){ if(err&&err.code==='declined') return false; if(err&&err.code==='rate_limited'){ toast('저장 창이 이미 열려 있어요'); return false; } }
   }
   if(!window.claude){ // regular website (e.g. Netlify): a normal browser download works
     const u=URL.createObjectURL(blob), a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(u),4000); toast(`${name} 저장했어요`); return;
+    setTimeout(()=>URL.revokeObjectURL(u),4000); toast(`${name} 저장했어요`); return true;
   }
   const url=URL.createObjectURL(blob), ov=document.createElement('div'); ov.className='overlay';
   ov.innerHTML = isImage ? `<div class="box"><b>이미지를 길게 누르거나 우클릭해서 저장하세요</b><img alt="완성된 배너" src="${url}"><button class="btn" type="button">닫기</button></div>`
@@ -2363,7 +2401,7 @@ async function showWorks(){
   const tb=m.querySelector('#wTabs'); if(tb) tb.onclick=e=>{ const b=e.target.closest('button'); if(b){ worksTab=b.dataset.v; workArm=null; showWorks(); } };
   const doSave=async over=>{
     if(team){ keepPw(); keepAuthor(); busy(true);
-      try{ const it=await twSave(nameV(), m.querySelector('#wAuthor').value.trim(), over?S.teamWorkId:null, status); S.teamWorkId=it.id; S.workId=null; S.workName=it.name; save(); toast(over?'팀 작업함에 덮어썼어요':`‘${it.name}’을 팀 작업함에 저장했어요`); showWorks(); }
+      try{ const it=await twSave(nameV(), m.querySelector('#wAuthor').value.trim(), over?S.teamWorkId:null, status); liveEvent('save'); S.teamWorkId=it.id; S.workId=null; S.workName=it.name; save(); toast(over?'팀 작업함에 덮어썼어요':`‘${it.name}’을 팀 작업함에 저장했어요`); showWorks(); }
       catch(e){ busy(false); status(''); if(e&&e.code==='bad_password') toast('팀 비밀번호가 맞지 않아요'); else teamErr(e); }
       return; }
     try{ const w=await packWork(nameV(), over?S.workId:undefined); await idbDo('readwrite',st=>st.put(w),'works'); S.workId=w.id; S.teamWorkId=null; S.workName=w.name; save(); toast(over?'덮어써서 저장했어요':`‘${w.name}’을 저장했어요`); showWorks(); }
@@ -2444,12 +2482,141 @@ function showFigma(){
     <p class="hint" id="fgStatus" style="margin:0"></p>`);
   const busy=t=>{ m.querySelector('#fgStatus').textContent=t; };
   m.querySelector('#fgFile').onclick=async()=>{ busy('만드는 중…'); const svg=await buildSVG(); busy('');
-    saveBlob(`banner_${S.tid}_${W()}x${H()}.svg`, new Blob([svg],{type:'image/svg+xml'})); };
+    if(await saveBlob(`banner_${S.tid}_${W()}x${H()}.svg`, new Blob([svg],{type:'image/svg+xml'}))) liveEvent('figma'); };
   m.querySelector('#fgCopy').onclick=async()=>{ busy('만드는 중…'); const svg=await buildSVG();
-    try{ await navigator.clipboard.writeText(svg); busy('복사했어요. 피그마 캔버스를 클릭하고 Ctrl+V 하세요.'); }
+    try{ await navigator.clipboard.writeText(svg); busy('복사했어요. 피그마 캔버스를 클릭하고 Ctrl+V 하세요.'); liveEvent('figma'); }
     catch(e){ busy('이 화면에서는 복사가 막혀 있어요. ‘SVG 파일 저장’을 써주세요.'); } };
 }
 $('figmaBtn').onclick=showFigma;
+
+/* ---------- 팀 현황: share what I'm working on, see what the team is making (netlify/functions/live.mjs) ---------- */
+const LIVE={on:false, timer:0, lastSig:'', lastAct:Date.now(), uploaded:new Set(), sending:false};
+const TPL_NAME = id => (TPL.find(t=>t.id===id)||{}).n || id || '';
+const EV_NAME = {png:'PNG 저장', jpg:'JPG 저장', figma:'피그마', save:'팀 작업함 저장'};
+function browserId(){ try{ let b=localStorage.getItem('banner-studio-bid'); if(!b){ b=Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); localStorage.setItem('banner-studio-bid',b); } return b; }catch(e){ return LIVE.tmpId||(LIVE.tmpId='t'+Math.random().toString(36).slice(2,10)); } }
+function liveSid(){ const d=new Date(); return `${browserId()}-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`; }
+const headline1 = () => (S.texts.headline||'').split('\n').join(' ').slice(0,40);
+async function liveHash(img){ if(img._hash) return img._hash; const b=await blobOf(img); const h=await sha256(b);
+  if(!LIVE.uploaded.has(h)){ try{ const r=await fetch('/api/limg/'+h,{method:'PUT',headers:{'content-type':b.type||'image/png'},body:b}); if(r.ok) LIVE.uploaded.add(h); }catch(e){} }
+  try{ img._hash=h; }catch(e){} return h; }
+function liveSoon(){ if(!LIVE.on) return; clearTimeout(LIVE.timer); LIVE.timer=setTimeout(liveSend,2500); }
+async function liveSend(){
+  if(!LIVE.on||LIVE.sending) return; LIVE.sending=true;
+  try{
+    const prods=[]; for(const p of prodImgs) prods.push(p.sample?{sample:true}:{name:p.name||'',hash:await liveHash(p.img)});
+    const cards=[]; for(let i=0;i<cardPics.length;i++){ const c=cardPics[i]; if(!c||!c.img){ cards[i]=null; continue; } const j=prodImgs.findIndex(p=>p.img===c.img); cards[i]= j>=0?{prod:j}:{hash:await liveHash(c.img)}; }
+    const imgs={prods,cards,bg:bgImg&&S.bgMode==='image'?await liveHash(bgImg):null};
+    const state=snapshot(), sig=state+JSON.stringify(imgs);
+    if(sig===LIVE.lastSig) return;
+    const r=await fetch('/api/live',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid:liveSid(),name:myName(),state,imgs,thumb:workThumb(),tid:S.tid,size:`${W()}x${H()}`,headline:headline1()})});
+    if(r.ok) LIVE.lastSig=sig;
+  }catch(e){} finally{ LIVE.sending=false; }
+}
+function livePing(){ if(!LIVE.on||document.visibilityState!=='visible'||Date.now()-LIVE.lastAct>10*60e3) return;
+  fetch('/api/live?ping=1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid:liveSid(),name:myName()})}).catch(()=>{}); }
+function liveEvent(type){ if(!LIVE.on) return;
+  const c=document.createElement('canvas'), k=420/Math.max(W(),H()); c.width=Math.round(W()*k); c.height=Math.round(H()*k); drawScene(c.getContext('2d'),k,S.tid,S.els,S.objects,false,S.shapes);
+  liveSend();
+  fetch('/api/live?event=1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sid:liveSid(),name:myName(),type,thumb:c.toDataURL('image/jpeg',.8),tid:S.tid,size:`${W()}x${H()}`,headline:headline1()})}).catch(()=>{}); }
+async function liveInit(){
+  try{ const r=await fetch('/api/live',{cache:'no-store'}); if(!r.ok) return; const j=await r.json(); if(!j||!j.ok) return; }catch(e){ return; }
+  LIVE.on=true; $('liveBar').hidden=false; $('teamBtn').hidden=false;
+  const f=$('myName'); f.value=myName(); f.classList.toggle('need',!f.value);
+  f.oninput=()=>{ try{ localStorage.setItem('banner-studio-author',f.value.trim()); }catch(e){} f.classList.toggle('need',!f.value.trim()); };
+  f.onchange=()=>{ LIVE.lastSig=''; liveSoon(); };
+  if(!f.value) toast('팀 현황에 표시될 이름을 오른쪽 위에 적어주세요');
+  ['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,()=>{ LIVE.lastAct=Date.now(); },true));
+  setInterval(livePing,60e3); document.addEventListener('visibilitychange',livePing);
+  $('liveInfo').onclick=()=>openModal(`<div class="head"><h3>팀 현황 공유</h3><button class="btn small" data-close type="button">닫기</button></div>
+    <p style="margin:0">이 사이트에서 작업하는 화면은 팀원들의 <b>팀 현황</b>에 보여요.</p>
+    <ul class="hint" style="margin:0;padding-left:18px;line-height:1.7"><li>지금 작업 중인 배너가 2~3초 간격으로 공유돼요.</li><li>PNG·JPG·피그마 저장, 팀 작업함 저장은 ‘최근 저장한 소재’ 기록에 남아요.</li><li>기록은 30일 동안 보관돼요. 표시 이름은 오른쪽 위 ‘내 이름’ 칸에서 바꿀 수 있어요.</li></ul>`);
+  $('teamBtn').onclick=showTeam;
+  liveSoon(); livePing();
+}
+const ago = (t,now) => { const s=Math.max(0,Math.round(((now||Date.now())-t)/1000)); if(s<60) return '방금 전'; if(s<3600) return `${Math.floor(s/60)}분 전`; if(s<86400) return `${Math.floor(s/3600)}시간 전`; return `${Math.floor(s/86400)}일 전`; };
+const ACTIVE_MS = 2*60e3;
+let teamTimer=0, teamRange=7;
+async function showTeam(){
+  clearInterval(teamTimer);
+  const m=openModal(`<div class="head"><h3>팀 현황</h3><div class="row"><div class="seg" id="tmRange"><button type="button" data-v="7">최근 7일</button><button type="button" data-v="30">최근 30일</button></div><button class="btn small" data-close type="button">닫기</button></div></div><div id="tmBody"><p class="hint">불러오는 중…</p></div>`);
+  m.querySelector('.box').style.width='min(980px,100%)';
+  const load=async()=>{
+    if(!document.body.contains(m)){ clearInterval(teamTimer); return; }
+    let j; try{ const r=await fetch('/api/live',{cache:'no-store'}); j=await r.json(); }catch(e){ m.querySelector('#tmBody').innerHTML='<p class="hint">팀 현황을 불러오지 못했어요. 잠시 뒤 다시 열어주세요.</p>'; return; }
+    const now=j.now||Date.now(), since=now-teamRange*864e5;
+    const sessions=(j.sessions||[]), events=(j.events||[]).filter(e=>e.time>since);
+    const active=sessions.filter(s=>now-s.seen<ACTIVE_MS);
+    const recentS=sessions.filter(s=>s.seen>since);
+    const byName={};
+    recentS.forEach(s=>{ const n=s.name||'이름 없음', o=byName[n]||(byName[n]={name:n,days:new Set(),edits:0,exports:0,last:0,tpls:{}}); o.days.add(s.id.split('-').pop()); o.edits+=s.edits||0; o.last=Math.max(o.last,s.seen); if(s.tid) o.tpls[s.tid]=(o.tpls[s.tid]||0)+1; });
+    events.forEach(e=>{ const n=e.name||'이름 없음', o=byName[n]||(byName[n]={name:n,days:new Set(),edits:0,exports:0,last:0,tpls:{}}); o.exports++; o.last=Math.max(o.last,e.time); });
+    const people=Object.values(byName).sort((a,b)=>b.last-a.last);
+    const card=(img,title,line1,line2,btn)=>`<div class="tm-card"><img alt="" loading="lazy" src="${img}"><div class="meta"><b>${title}</b><i>${line1}</i><span>${line2}</span>${btn||''}</div></div>`;
+    m.querySelector('#tmBody').innerHTML=`
+      <div class="tm-stats">
+        <div class="tm-stat"><b>${active.length}</b><span>지금 작업 중</span></div>
+        <div class="tm-stat"><b>${people.length}</b><span>${teamRange}일간 사용한 팀원</span></div>
+        <div class="tm-stat"><b>${events.length}</b><span>${teamRange}일간 저장한 소재</span></div>
+        <div class="tm-stat"><b>${recentS.length}</b><span>${teamRange}일간 작업 횟수(사람·날짜별)</span></div>
+      </div>
+      <section class="tm-sec"><h4><span class="dot ${active.length?'':'idle'}"></span>지금 작업 중</h4>
+        ${active.length?`<div class="tm-grid">${active.map(s=>card(`/api/live/${encodeURIComponent(s.id)}?thumb=1&v=${s.updated}`, esc(s.name||'이름 없음')+(s.id===liveSid()?' <span class="tm-tag">나</span>':''), esc(s.headline||'(제목 없음)'), `${esc(TPL_NAME(s.tid))} · ${ago(s.updated,now)} 수정`, `<button class="btn small" type="button" data-watch="${esc(s.id)}" style="margin-top:4px">실시간 보기</button>`)).join('')}</div>`:'<p class="hint">지금 작업 중인 팀원이 없어요. 2분 안에 작업한 사람이 여기에 보여요.</p>'}
+      </section>
+      <section class="tm-sec"><h4>최근 저장한 소재 <span class="hint" style="font-weight:400">PNG·JPG·피그마로 내보내거나 팀 작업함에 저장한 순간</span></h4>
+        ${events.length?`<div class="tm-grid">${events.slice(0,60).map(e=>card(`/api/live/${encodeURIComponent(e.id)}?thumb=1`, `${esc(e.name||'이름 없음')} <span class="tm-tag">${EV_NAME[e.type]||esc(e.type)}</span>`, esc(e.headline||'(제목 없음)'), `${esc(TPL_NAME(e.tid))} · ${esc(e.size||'')} · ${ago(e.time,now)}`)).join('')}</div>`:'<p class="hint">이 기간에 저장한 소재가 없어요.</p>'}
+      </section>
+      <section class="tm-sec"><h4>팀원별 사용 현황</h4>
+        ${people.length?`<div class="tm-wrap"><table class="tm-table"><thead><tr><th>이름</th><th>작업한 날</th><th>저장한 소재</th><th>수정 횟수</th><th>많이 쓴 템플릿</th><th>마지막 작업</th></tr></thead><tbody>${people.map(o=>{ const top=Object.entries(o.tpls).sort((a,b)=>b[1]-a[1])[0];
+          return `<tr><td>${esc(o.name)}</td><td>${o.days.size}일</td><td>${o.exports}개</td><td>${o.edits}회</td><td>${top?esc(TPL_NAME(top[0])):'-'}</td><td>${ago(o.last,now)}</td></tr>`; }).join('')}</tbody></table></div>`:'<p class="hint">이 기간에 사용한 팀원이 없어요.</p>'}
+        <p class="hint" style="margin:6px 0 0">이름은 각자 오른쪽 위 ‘내 이름’에 적은 대로 묶여요. 이름을 안 적은 사람은 ‘이름 없음’으로 보여요.</p>
+      </section>`;
+    m.querySelectorAll('[data-watch]').forEach(b=>b.onclick=()=>watchSession(b.dataset.watch));
+  };
+  m.querySelector('#tmRange').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; teamRange=+b.dataset.v; m.querySelectorAll('#tmRange button').forEach(x=>x.setAttribute('aria-pressed',x===b)); load(); };
+  m.querySelectorAll('#tmRange button').forEach(x=>x.setAttribute('aria-pressed',+x.dataset.v===teamRange));
+  await load(); teamTimer=setInterval(load,8000);
+}
+/* draw someone else's state onto a canvas by briefly swapping the editor's globals */
+const foreignImgCache={};
+function foreignImg(h){ return foreignImgCache[h] || (foreignImgCache[h]=new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src='/api/limg/'+h; })); }
+async function foreignParts(data){
+  const sample=await sampleImgP(), I=data.imgs||{};
+  const prods=await Promise.all((I.prods||[]).map(async p=>p.sample||!p.hash?{img:sample,name:'샘플',sample:true}:{img:await foreignImg(p.hash),name:p.name||''}));
+  const cards=[]; for(let i=0;i<(I.cards||[]).length;i++){ const c=I.cards[i]; if(!c) continue; cards[i]= c.prod!=null ? prods[c.prod] : {img:await foreignImg(c.hash),name:''}; }
+  const bg=I.bg?await foreignImg(I.bg):null;
+  return {st:JSON.parse(data.state), prods:prods.length?prods:[{img:sample,name:'샘플',sample:true}], cards, bg};
+}
+function withForeign(f, fn){
+  const keys=new Set([...Object.keys(S),...Object.keys(f.st)]), savedS=Object.assign({},S), saved={prodImgs,cardPics,bgImg,bgAvg};
+  Object.assign(S,f.st); prodImgs=f.prods; cardPics=f.cards; bgImg=f.bg; bgAvg=f.bg?avgColor(f.bg):null;
+  try{ return fn(); } finally { keys.forEach(k=>{ if(k in savedS) S[k]=savedS[k]; else delete S[k]; }); prodImgs=saved.prodImgs; cardPics=saved.cardPics; bgImg=saved.bgImg; bgAvg=saved.bgAvg; }
+}
+async function watchSession(sid){
+  clearInterval(teamTimer);
+  const m=openModal(`<div class="head"><h3 id="lvTitle">실시간 보기</h3><div class="row"><button class="btn small" id="lvBack" type="button">← 팀 현황</button><button class="btn small" data-close type="button">닫기</button></div></div>
+    <p class="hint" id="lvStatus" style="margin:0">불러오는 중…</p><canvas class="live-canvas" id="lvCanvas" width="1080" height="1080"></canvas>
+    <div class="row" style="justify-content:space-between"><span class="hint">보기 전용이에요. 상대방 화면은 그대로이고, 2~3초마다 새로 그려요.</span><button class="btn small primary" id="lvTake" type="button">내 화면으로 가져오기</button></div>`);
+  m.querySelector('.box').style.width='min(860px,100%)';
+  let last=0, cur=null, timer=0;
+  const tick=async()=>{
+    if(!document.body.contains(m)){ clearInterval(timer); return; }
+    try{ const r=await fetch('/api/live/'+encodeURIComponent(sid),{cache:'no-store'}); if(!r.ok) throw 0; const d=await r.json(); const meta=d.meta||{};
+      m.querySelector('#lvTitle').textContent=`${meta.name||'이름 없음'} 님의 화면`;
+      m.querySelector('#lvStatus').innerHTML=`<span class="dot ${Date.now()-meta.updated<ACTIVE_MS?'':'idle'}" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>${esc(TPL_NAME(meta.tid))} · ${esc(meta.size||'')} · 마지막 수정 ${ago(meta.updated)}`;
+      if(meta.updated!==last){ last=meta.updated; cur=await foreignParts(d); const cv=m.querySelector('#lvCanvas');
+        withForeign(cur,()=>{ cv.width=W(); cv.height=H(); drawScene(cv.getContext('2d'),1,S.tid,S.els,S.objects,false,S.shapes); }); }
+    }catch(e){ m.querySelector('#lvStatus').textContent='화면을 불러오지 못했어요. 잠시 뒤 다시 시도할게요.'; }
+  };
+  m.querySelector('#lvBack').onclick=()=>{ clearInterval(timer); showTeam(); };
+  m.querySelector('#lvTake').onclick=()=>{ if(!cur) return; checkpoint();
+    Object.assign(S,JSON.parse(JSON.stringify(cur.st))); if(!Array.isArray(S.shapes)) S.shapes=[]; if(!S.edited) S.edited={}; if(!Array.isArray(S.cardOpts)) S.cardOpts=[];
+    S.els=Object.assign(fillMissing({},W(),H()),S.els); S.workId=null; S.teamWorkId=null;
+    prodImgs=cur.prods; cardPics=cur.cards.slice(); if(cur.bg){ bgImg=cur.bg; bgAvg=avgColor(cur.bg); }
+    if(!Array.isArray(S.items)||S.items.length!==prodImgs.length) arrangeItems();
+    clearInterval(timer); closeModal(); sel=null; logoListKey=''; textKey=''; loadLogoImgs(); syncLeft(); updateProdUI(); renderInspector(); render(); drawThumbs(); save(); updateCopy();
+    toast('그 화면을 내 화면으로 가져왔어요 · 되돌리기로 취소할 수 있어요'); };
+  await tick(); timer=setInterval(tick,3000);
+}
 
 /* ---------- free-form requests (Claude) ---------- */
 let sampler=null, sampleImgMax=0, refs=[], aiCtl=null;
@@ -2615,7 +2782,7 @@ async function initAI(){
 /* ---------- toast / persistence ---------- */
 let tT=0; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('show'),2200); }
 let sT=0;
-function save(){ histSoon(); autoSave(); clearTimeout(sT); sT=setTimeout(()=>{ try{ localStorage.setItem('banner-studio-v3',JSON.stringify(S)); }catch(e){} },400); }
+function save(){ histSoon(); autoSave(); liveSoon(); clearTimeout(sT); sT=setTimeout(()=>{ try{ localStorage.setItem('banner-studio-v3',JSON.stringify(S)); }catch(e){} },400); }
 function restore(){
   try{ const raw=localStorage.getItem('banner-studio-v3'); if(!raw) return false; const d=JSON.parse(raw);
     if(!d||!d.els||!SIZES[d.size]||!TPL.find(t=>t.id===d.tid)) return false;
@@ -2636,6 +2803,7 @@ if(document.fonts){ document.fonts.ready.then(()=>{ if(!had){ /* re-measure with
   const s2=makeSample(); s2.onload=()=>{ if(productIsSample()){ prodImgs[0].img=s2; updateProdUI(); } scheduleRender(); scheduleThumbs(); }; }); }
 (async()=>{ try{ if(window.claude&&window.claude.use){ downloads=await window.claude.use('downloads'); } }catch(e){} })();
 initAI();
+liveInit();
 (async()=>{ if(await teamLoad()){ loadLogoImgs(); logoListKey=''; syncLeft(); } await loadLib(); })();
 $('undoBtn').onclick=undo; $('redoBtn').onclick=redo;
 document.addEventListener('keydown',e=>{ if(!(e.metaKey||e.ctrlKey)) return; const k=e.key.toLowerCase(); const tag=document.activeElement?.tagName;
